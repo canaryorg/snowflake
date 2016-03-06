@@ -52,6 +52,22 @@ func Handler(factory *snowflake.Factory, nMax int) http.Handler {
 	}
 }
 
+type Statistics struct {
+	ServerId int `json:"server-id"`
+}
+
+func Stats(serverId int) http.Handler {
+	var handlerFunc http.HandlerFunc = func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(Statistics{
+			ServerId: serverId,
+		})
+	}
+
+	return handlerFunc
+}
+
 func Multi(serverId, nMax int) http.HandlerFunc {
 	handlers := map[string]http.Handler{}
 
@@ -77,6 +93,7 @@ func Multi(serverId, nMax int) http.HandlerFunc {
 		ServerId: int64(serverId),
 	})
 	handlers["/"] = Handler(factory, nMax)
+	handlers["/internal/stats"] = Stats(serverId)
 
 	var handler http.HandlerFunc = func(w http.ResponseWriter, req *http.Request) {
 		handler, ok := handlers[req.URL.Path]
