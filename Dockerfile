@@ -6,9 +6,8 @@ ENV GOPATH /home/go
 
 RUN apt-get update && apt-get install -y wget
 ADD . /home/go/src/github.com/savaki/snowflake
-RUN wget -O /tmp/golang.tar.gz https://storage.googleapis.com/golang/go1.6.linux-amd64.tar.gz && \
-  cd /usr/local && \
-  tar -xzvf /tmp/golang.tar.gz && \
+RUN wget -q -O /tmp/golang.tar.gz https://storage.googleapis.com/golang/go1.6.linux-amd64.tar.gz && \
+  tar -C /usr/local -xzf /tmp/golang.tar.gz && \
   /usr/local/go/bin/go install github.com/savaki/snowflake/cmd/snowflake && \
   rm -rf /usr/local/go /tmp/golang.tar.gz
 
