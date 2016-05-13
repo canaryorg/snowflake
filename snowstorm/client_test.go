@@ -18,7 +18,7 @@ func (t *Remote) IntN(ctx context.Context, n int) ([]int64, error) {
 
 func TestGenerateIdStream(t *testing.T) {
 	buffer := 4
-	client := snowstorm.New(buffer, &Remote{snowflake.Default})
+	client := snowstorm.New(&Remote{snowflake.Default})
 
 	uniques := map[int64]int64{}
 	iterations := buffer * 10

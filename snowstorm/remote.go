@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"golang.org/x/net/context"
@@ -24,7 +25,8 @@ type httpFactory struct {
 
 func (h *httpFactory) IntN(ctx context.Context, n int) ([]int64, error) {
 	host := h.hosts[h.rand.Intn(len(h.hosts))]
-	resp, err := h.getFunc(ctx, http.DefaultClient, host)
+	url := host + "?n=" + strconv.Itoa(n)
+	resp, err := h.getFunc(ctx, http.DefaultClient, url)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, err.Error())
 		return nil, err
@@ -36,27 +38,37 @@ func (h *httpFactory) IntN(ctx context.Context, n int) ([]int64, error) {
 	return ids, err
 }
 
-func HttpFactory(hosts ...string) (RemoteFactory, error) {
-	for _, host := range hosts {
+func HttpFactory(opts ...Option) (RemoteFactory, error) {
+	h := &httpFactory{
+		hosts:   []string{"http://snowflake.altairsix.com/4/13"},
+		rand:    rand.New(rand.NewSource(time.Now().UnixNano())),
+		getFunc: ctxhttp.Get,
+	}
+
+	for _, opt := range opts {
+		opt(h)
+	}
+
+	for _, host := range h.hosts {
 		_, err := http.NewRequest("GET", host, nil)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	return &httpFactory{
-		hosts:   hosts,
-		rand:    rand.New(rand.NewSource(time.Now().UnixNano())),
-		getFunc: ctxhttp.Get,
-	}, nil
+	return h, nil
 }
 
-func WithGetFunc(remote RemoteFactory, getFunc func(ctx context.Context, client *http.Client, url string) (*http.Response, error)) RemoteFactory {
-	switch v := remote.(type) {
-	case *httpFactory:
-		v.getFunc = getFunc
-		return v
-	default:
-		return remote
+type Option func(*httpFactory)
+
+func GetFunc(fn func(ctx context.Context, client *http.Client, url string) (*http.Response, error)) Option {
+	return func(h *httpFactory) {
+		h.getFunc = fn
+	}
+}
+
+func Hosts(hosts ...string) Option {
+	return func(h *httpFactory) {
+		h.hosts = hosts
 	}
 }

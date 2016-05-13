@@ -1,11 +1,17 @@
 package snowstorm
 
 import (
+	"fmt"
 	"math/rand"
+	"os"
 	"sync"
 	"time"
 
 	"golang.org/x/net/context"
+)
+
+const (
+	RequestSize = 512
 )
 
 type Client struct {
@@ -21,26 +27,37 @@ func (c *Client) Id() int64 {
 	return <-c.ch
 }
 
-func (c *Client) start() {
+func (c *Client) spawnN(n int) {
+	c.wg.Add(n)
+	for i := 0; i < n; i++ {
+		go c.spawn()
+	}
+}
+func (c *Client) spawn() {
 	defer c.wg.Done()
 
 	for {
 		ctx, _ := context.WithTimeout(context.Background(), time.Second*3)
-		ids, err := c.factory.IntN(ctx, c.n)
+		ids, err := c.factory.IntN(ctx, RequestSize)
 		if err != nil {
+			select {
+			case <-c.ctx.Done():
+				return
+			default:
+			}
+
 			// if there was a problem, hang out for a little bit before trying again
+			fmt.Fprintln(os.Stderr, err)
 			time.Sleep(250*time.Millisecond + time.Duration(rand.Intn(100))*time.Millisecond)
 			continue
 		}
 
 		for _, id := range ids {
-			c.ch <- id
-		}
-
-		select {
-		case <-c.ctx.Done():
-			return
-		default:
+			select {
+			case c.ch <- id:
+			case <-c.ctx.Done():
+				return
+			}
 		}
 	}
 }
@@ -50,20 +67,17 @@ func (c *Client) Close() {
 	c.wg.Wait()
 }
 
-func New(buffer int, factory RemoteFactory) *Client {
+func New(factory RemoteFactory) *Client {
 	ctx, cancel := context.WithCancel(context.Background())
 	c := &Client{
 		ctx:     ctx,
 		cancel:  cancel,
 		factory: factory,
-		ch:      make(chan int64, buffer),
+		ch:      make(chan int64, 4096),
 		wg:      &sync.WaitGroup{},
-		n:       buffer / 3,
 	}
 
-	// start background job to pull content
-	c.wg.Add(1)
-	go c.start()
+	c.spawnN(8)
 
 	return c
 }

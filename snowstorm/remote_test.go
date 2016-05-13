@@ -11,22 +11,21 @@ import (
 )
 
 func TestHttpFactory(t *testing.T) {
-	handler := snowstorm.Handler(snowflake.Default, 16)
+	handler := snowstorm.Handler(snowflake.Default, 512)
 	router := http.NewServeMux()
 	router.Handle("/ids", handler)
 
 	app := mockhttp.New(handler)
 
-	remoteFactory, err := snowstorm.HttpFactory("http://localhost/ids")
+	fn := func(ctx context.Context, client *http.Client, url string) (*http.Response, error) {
+		return app.GET(url)
+	}
+	remoteFactory, err := snowstorm.HttpFactory(snowstorm.GetFunc(fn))
 	if err != nil {
 		t.Error("Unable to create HttpFactory")
 	}
-	remoteFactory = snowstorm.WithGetFunc(remoteFactory, func(ctx context.Context, client *http.Client, url string) (*http.Response, error) {
-		return app.GET(url)
-	})
 
-	client := snowstorm.New(16, remoteFactory)
-	defer client.Close()
+	client := snowstorm.New(remoteFactory)
 
 	uniques := map[int64]int64{}
 	iterations := 100
@@ -34,6 +33,7 @@ func TestHttpFactory(t *testing.T) {
 		id := client.Id()
 		uniques[id] = id
 	}
+	client.Close()
 
 	if v := len(uniques); v != iterations {
 		t.Errorf("expected %v; got %v\n", iterations, v)
