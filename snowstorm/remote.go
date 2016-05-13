@@ -3,11 +3,10 @@ package snowstorm
 import (
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"net/http"
 	"os"
 	"strconv"
-	"time"
+	"sync/atomic"
 
 	"golang.org/x/net/context"
 	"golang.org/x/net/context/ctxhttp"
@@ -18,13 +17,19 @@ type RemoteFactory interface {
 }
 
 type httpFactory struct {
-	hosts   []string
-	rand    *rand.Rand
-	getFunc func(ctx context.Context, client *http.Client, url string) (*http.Response, error)
+	hosts     []string
+	hostCount int32
+	offset    int32
+	getFunc   func(ctx context.Context, client *http.Client, url string) (*http.Response, error)
 }
 
 func (h *httpFactory) IntN(ctx context.Context, n int) ([]int64, error) {
-	host := h.hosts[h.rand.Intn(len(h.hosts))]
+	host := h.hosts[int(h.offset%h.hostCount)]
+	atomic.AddInt32(&h.offset, 1)
+	if h.offset > h.hostCount {
+		atomic.StoreInt32(&h.offset, 0)
+	}
+
 	url := host + "?n=" + strconv.Itoa(n)
 	resp, err := h.getFunc(ctx, http.DefaultClient, url)
 	if err != nil {
@@ -41,13 +46,14 @@ func (h *httpFactory) IntN(ctx context.Context, n int) ([]int64, error) {
 func HttpFactory(opts ...Option) (RemoteFactory, error) {
 	h := &httpFactory{
 		hosts:   []string{"http://snowflake.altairsix.com/4/13"},
-		rand:    rand.New(rand.NewSource(time.Now().UnixNano())),
 		getFunc: ctxhttp.Get,
 	}
 
 	for _, opt := range opts {
 		opt(h)
 	}
+
+	h.hostCount = int32(len(h.hosts))
 
 	for _, host := range h.hosts {
 		_, err := http.NewRequest("GET", host, nil)
