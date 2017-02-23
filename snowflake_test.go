@@ -28,18 +28,28 @@ func TestIdNReturnsUniqueValues(t *testing.T) {
 		ServerBits:   4,
 		SequenceBits: 2,
 	})
-	n := 2500
-	ids := generator.IdN(n)
-	if v := len(ids); v != n {
-		t.Errorf("expected %v; got %v\n", n, v)
+	n := 100000
+	rounds := 8
+	allIds := make([][]int64, 0, rounds)
+
+	for i := 0; i < rounds; i++ {
+		ids := generator.IdN(n)
+		allIds = append(allIds, ids)
 	}
 
-	uniques := map[int64]int64{}
-	for _, id := range ids {
-		uniques[id] = id
+	unique := map[int64]struct{}{}
+	for _, ids := range allIds {
+		if v := len(ids); v != n {
+			t.Errorf("expected %v; got %v\n", n, v)
+		}
+		for _, id := range ids {
+			unique[id] = struct{}{}
+		}
 	}
 
-	if v := len(uniques); v != n {
-		t.Errorf("expected %v; got %v\n", n, v)
+	expected := n * rounds
+	if v := len(unique); v != expected {
+		t.Errorf("expected %v; got %v\n", expected, v)
+		return
 	}
 }

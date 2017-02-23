@@ -10,11 +10,6 @@ import (
 	"github.com/savaki/snowflake"
 )
 
-type server struct {
-	factory *snowflake.Factory
-	nMax    int
-}
-
 func writeErr(w http.ResponseWriter, err error) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusBadRequest)
@@ -23,32 +18,27 @@ func writeErr(w http.ResponseWriter, err error) {
 	})
 }
 
-func (s *server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	req.ParseForm()
+func Handler(factory *snowflake.Factory, maxN int) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		req.ParseForm()
 
-	n := 1
-	if v := req.FormValue("n"); v != "" {
-		var err error
-		n, err = strconv.Atoi(v)
-		if err != nil {
-			writeErr(w, err)
-			return
+		n := 1
+		if v := req.FormValue("n"); v != "" {
+			var err error
+			n, err = strconv.Atoi(v)
+			if err != nil {
+				writeErr(w, err)
+				return
+			}
+			if n > maxN {
+				writeErr(w, errors.New(fmt.Sprintf("exceeded the maximum number per request, %v", maxN)))
+				return
+			}
 		}
-		if n > s.nMax {
-			writeErr(w, errors.New(fmt.Sprintf("exceeded the maximum number per request, %v", s.nMax)))
-			return
-		}
-	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(s.factory.IdN(n))
-}
-
-func Handler(factory *snowflake.Factory, nMax int) http.Handler {
-	return &server{
-		factory: factory,
-		nMax:    nMax,
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(factory.IdN(n))
 	}
 }
 
@@ -68,7 +58,7 @@ func Stats(serverId int) http.Handler {
 	return handlerFunc
 }
 
-func Multi(serverId, nMax int) http.HandlerFunc {
+func Multi(serverID, nMax int) http.HandlerFunc {
 	handlers := map[string]http.Handler{}
 
 	for srv := 1; srv <= 13; srv++ {
@@ -80,7 +70,7 @@ func Multi(serverId, nMax int) http.HandlerFunc {
 			func(server, sequence int) {
 				path := fmt.Sprintf("/%v/%v", srv, seq)
 				factory := snowflake.New(snowflake.Options{
-					ServerId:     int64(serverId),
+					ServerID:     int64(serverID),
 					ServerBits:   uint(server),
 					SequenceBits: uint(sequence),
 				})
@@ -90,10 +80,10 @@ func Multi(serverId, nMax int) http.HandlerFunc {
 	}
 
 	factory := snowflake.New(snowflake.Options{
-		ServerId: int64(serverId),
+		ServerID: int64(serverID),
 	})
 	handlers["/"] = Handler(factory, nMax)
-	handlers["/internal/stats"] = Stats(serverId)
+	handlers["/internal/stats"] = Stats(serverID)
 
 	var handler http.HandlerFunc = func(w http.ResponseWriter, req *http.Request) {
 		handler, ok := handlers[req.URL.Path]

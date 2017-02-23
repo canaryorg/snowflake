@@ -1,13 +1,12 @@
 package snowstorm
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"os"
 	"sync"
 	"time"
-
-	"golang.org/x/net/context"
 )
 
 const (
@@ -33,6 +32,7 @@ func (c *Client) spawnN(n int) {
 		go c.spawn()
 	}
 }
+
 func (c *Client) spawn() {
 	defer c.wg.Done()
 

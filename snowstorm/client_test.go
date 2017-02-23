@@ -1,11 +1,11 @@
 package snowstorm_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/savaki/snowflake"
 	"github.com/savaki/snowflake/snowstorm"
-	"golang.org/x/net/context"
 )
 
 type Remote struct {

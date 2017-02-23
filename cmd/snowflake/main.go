@@ -1,16 +1,15 @@
 package main
 
 import (
-	"fmt"
-	"net/http"
-	"os"
-	"time"
+	"context"
 	"encoding/json"
+	"flag"
+	"fmt"
+	"log"
+	"net/http"
+	"time"
 
-	"github.com/codegangsta/cli"
 	"github.com/savaki/snowflake/snowstorm"
-	"golang.org/x/net/context"
-	"golang.org/x/net/context/ctxhttp"
 )
 
 type UserData struct {
@@ -23,29 +22,42 @@ type Options struct {
 	AWS      bool
 }
 
-var opts Options
-
 func main() {
-	app := cli.NewApp()
-	app.Flags = []cli.Flag{
-		cli.IntFlag{"id", 0, "unique server id", "SERVER_ID", &opts.ServerId},
-		cli.IntFlag{"port", 7006, "port to list on", "PORT", &opts.Port},
-		cli.BoolTFlag{"no-aws", "do not attempt to retrieve server id from user data json", "NO_AWS", &opts.AWS},
+	var (
+		flagServerID = flag.Int("id", 0, "unique server id")
+		flagPort     = flag.Int("port", 7006, "port to list on")
+		flagNoAWS    = flag.Bool("no-aws", false, "do not attempt to retrieve server id from user data json")
+	)
+	flag.Parse()
+
+	opts := Options{
+		ServerId: *flagServerID,
+		Port:     *flagPort,
+		AWS:      !*flagNoAWS,
 	}
-	app.Action = run
-	app.Run(os.Args)
+
+	Run(opts)
 }
 
-func run(c *cli.Context) {
-	ctx, _ := context.WithTimeout(context.Background(), time.Second*3)
-	resp, err := ctxhttp.Get(ctx, http.DefaultClient, "http://169.254.169.254/latest/user-data")
-	if err == nil {
-		config := UserData{}
-		if err = json.NewDecoder(resp.Body).Decode(&config); err == nil {
-			opts.ServerId = config.ServerId
+func Run(opts Options) {
+	serverID := opts.ServerId
+
+	if opts.AWS {
+		ctx, _ := context.WithTimeout(context.Background(), time.Second*3)
+		req, err := http.NewRequest("GET", "http://169.254.169.254/latest/user-data", nil)
+		if err != nil {
+			log.Fatalln(err)
+		}
+		req = req.WithContext(ctx)
+		resp, err := http.DefaultClient.Do(req)
+		if err == nil {
+			config := UserData{}
+			if err = json.NewDecoder(resp.Body).Decode(&config); err == nil {
+				serverID = config.ServerId
+			}
 		}
 	}
 
-	handler := snowstorm.Multi(opts.ServerId, 512)
+	handler := snowstorm.Multi(serverID, 512)
 	http.ListenAndServe(fmt.Sprintf(":%v", opts.Port), handler)
 }

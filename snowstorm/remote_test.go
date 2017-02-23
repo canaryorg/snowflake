@@ -2,25 +2,26 @@ package snowstorm_test
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
-	"github.com/savaki/mockhttp"
 	"github.com/savaki/snowflake"
 	"github.com/savaki/snowflake/snowstorm"
-	"golang.org/x/net/context"
 )
 
 func TestHttpFactory(t *testing.T) {
-	handler := snowstorm.Handler(snowflake.Default, 512)
+	maxN := 512
+	handler := snowstorm.Handler(snowflake.Default, maxN)
 	router := http.NewServeMux()
-	router.Handle("/ids", handler)
+	router.Handle("/10/13", handler)
 
-	app := mockhttp.New(handler)
-
-	fn := func(ctx context.Context, client *http.Client, url string) (*http.Response, error) {
-		return app.GET(url)
+	fn := func(req *http.Request) (*http.Response, error) {
+		recorder := httptest.NewRecorder()
+		router.ServeHTTP(recorder, req)
+		return recorder.Result(), nil
 	}
-	remoteFactory, err := snowstorm.HttpFactory(snowstorm.GetFunc(fn))
+
+	remoteFactory, err := snowstorm.HttpFactory(snowstorm.DoFunc(fn), snowstorm.DoFunc(fn))
 	if err != nil {
 		t.Error("Unable to create HttpFactory")
 	}
@@ -28,7 +29,7 @@ func TestHttpFactory(t *testing.T) {
 	client := snowstorm.New(remoteFactory)
 
 	uniques := map[int64]int64{}
-	iterations := 100
+	iterations := maxN * 32
 	for i := 0; i < iterations; i++ {
 		id := client.Id()
 		uniques[id] = id

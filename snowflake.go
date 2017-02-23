@@ -6,9 +6,10 @@ import (
 	"time"
 )
 
-const nanosInMilli int64 = 1000 * 1000
-
-var epoch int64 = time.Date(2016, time.January, 1, 0, 0, 0, 0, time.UTC).UnixNano() / nanosInMilli
+var (
+	nanosInMilli int64 = time.Millisecond.Nanoseconds()
+	epoch        int64 = time.Date(2016, time.January, 1, 0, 0, 0, 0, time.UTC).UnixNano() / nanosInMilli
+)
 
 const (
 	ServerBits   = 10
@@ -25,7 +26,7 @@ var Default = New(Options{
 // Options contains the configurable options for Factory
 type Options struct {
 	// ServerId represents a unique value that identifies this generator instance
-	ServerId int64
+	ServerID int64
 
 	// ServerBits represents the number of bits used to represents the server
 	ServerBits uint
@@ -36,7 +37,7 @@ type Options struct {
 
 func (o Options) build() Options {
 	opts := Options{
-		ServerId:     o.ServerId,
+		ServerID:     o.ServerID,
 		ServerBits:   o.ServerBits,
 		SequenceBits: o.SequenceBits,
 	}
@@ -53,7 +54,7 @@ func (o Options) build() Options {
 
 // Factory is a generator of ids using Twitter's snowflake pattern
 type Factory struct {
-	serverId     int64
+	serverID     int64
 	serverBits   uint
 	serverMask   int64
 	sequence     int64
@@ -83,7 +84,7 @@ func New(opts Options) *Factory {
 	serverMask := mask(opts.ServerBits)
 
 	return &Factory{
-		serverId:     opts.ServerId & serverMask,
+		serverID:     opts.ServerID & serverMask,
 		serverBits:   opts.ServerBits,
 		serverMask:   serverMask,
 		sequenceBits: opts.SequenceBits,
@@ -97,29 +98,24 @@ func (s *Factory) IdN(n int) []int64 {
 	s.mux.Lock()
 	defer s.mux.Unlock()
 
-	var ticks time.Duration
 	t := time.Now().UnixNano()/nanosInMilli - epoch
-	ids := make([]int64, n)
+	ids := make([]int64, 0, n)
 
 	for i := 0; i < n; i++ {
-		if t == s.lastTime {
+		if t <= s.lastTime {
 			s.sequence = s.sequence + 1
 			if s.sequence == s.sequenceMax {
 				// sequence has reached it's maximum value, it's time to move to the next time slow
 				s.sequence = 0
-				t = t + 1
-				ticks = ticks + 1
+				s.lastTime++
 			}
 		} else {
 			s.sequence = 0
+			s.lastTime = t
 		}
-		s.lastTime = t
 
-		ids[i] = (t << (s.serverBits + s.sequenceBits)) | (s.serverId << s.sequenceBits) | s.sequence
-	}
-
-	if ticks > 0 {
-		time.Sleep(ticks * time.Millisecond) // ensure that the clock gets advanced to avoid race conditions
+		id := (s.lastTime << (s.serverBits + s.sequenceBits)) | (s.serverID << s.sequenceBits) | s.sequence
+		ids = append(ids, id)
 	}
 
 	return ids

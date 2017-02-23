@@ -1,15 +1,13 @@
 package snowstorm
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"strconv"
 	"sync/atomic"
-
-	"golang.org/x/net/context"
-	"golang.org/x/net/context/ctxhttp"
 )
 
 type RemoteFactory interface {
@@ -20,7 +18,7 @@ type httpFactory struct {
 	hosts     []string
 	hostCount int32
 	offset    int32
-	getFunc   func(ctx context.Context, client *http.Client, url string) (*http.Response, error)
+	doFunc    func(r *http.Request) (*http.Response, error)
 }
 
 func (h *httpFactory) IntN(ctx context.Context, n int) ([]int64, error) {
@@ -31,7 +29,13 @@ func (h *httpFactory) IntN(ctx context.Context, n int) ([]int64, error) {
 	}
 
 	url := host + "?n=" + strconv.Itoa(n)
-	resp, err := h.getFunc(ctx, http.DefaultClient, url)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+
+	resp, err := h.doFunc(req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, err.Error())
 		return nil, err
@@ -45,8 +49,8 @@ func (h *httpFactory) IntN(ctx context.Context, n int) ([]int64, error) {
 
 func HttpFactory(opts ...Option) (RemoteFactory, error) {
 	h := &httpFactory{
-		hosts:   []string{"http://snowflake.altairsix.com/4/13"},
-		getFunc: ctxhttp.Get,
+		hosts:  []string{"http://snowflake.altairsix.com/10/13"},
+		doFunc: http.DefaultClient.Do,
 	}
 
 	for _, opt := range opts {
@@ -55,6 +59,7 @@ func HttpFactory(opts ...Option) (RemoteFactory, error) {
 
 	h.hostCount = int32(len(h.hosts))
 
+	// ensure the hosts are all valid
 	for _, host := range h.hosts {
 		_, err := http.NewRequest("GET", host, nil)
 		if err != nil {
@@ -67,9 +72,9 @@ func HttpFactory(opts ...Option) (RemoteFactory, error) {
 
 type Option func(*httpFactory)
 
-func GetFunc(fn func(ctx context.Context, client *http.Client, url string) (*http.Response, error)) Option {
+func DoFunc(fn func(r *http.Request) (*http.Response, error)) Option {
 	return func(h *httpFactory) {
-		h.getFunc = fn
+		h.doFunc = fn
 	}
 }
 
