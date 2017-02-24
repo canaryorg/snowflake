@@ -1,11 +1,10 @@
-package snowstorm_test
+package snowflake_test
 
 import (
 	"context"
 	"testing"
 
 	"github.com/savaki/snowflake"
-	"github.com/savaki/snowflake/snowstorm"
 )
 
 type Remote struct {
@@ -18,7 +17,7 @@ func (t *Remote) IntN(ctx context.Context, n int) ([]int64, error) {
 
 func TestGenerateIdStream(t *testing.T) {
 	buffer := 4
-	client := snowstorm.New(&Remote{snowflake.Default})
+	client := snowflake.NewBufferedClient(&Remote{snowflake.Mock})
 
 	uniques := map[int64]int64{}
 	iterations := buffer * 10

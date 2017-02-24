@@ -1,4 +1,4 @@
-package snowstorm
+package snowflake
 
 import (
 	"context"
@@ -10,35 +10,35 @@ import (
 )
 
 const (
-	RequestSize = 512
+	defaultRequestSize = 512
 )
 
-type Client struct {
-	factory RemoteFactory
-	ch      chan int64
-	ctx     context.Context
-	cancel  func()
-	wg      *sync.WaitGroup
-	n       int
+type BufferedClient struct {
+	client Client
+	ch     chan int64
+	ctx    context.Context
+	cancel func()
+	wg     *sync.WaitGroup
+	n      int
 }
 
-func (c *Client) Id() int64 {
+func (c *BufferedClient) Id() int64 {
 	return <-c.ch
 }
 
-func (c *Client) spawnN(n int) {
+func (c *BufferedClient) spawnN(n int) {
 	c.wg.Add(n)
 	for i := 0; i < n; i++ {
 		go c.spawn()
 	}
 }
 
-func (c *Client) spawn() {
+func (c *BufferedClient) spawn() {
 	defer c.wg.Done()
 
 	for {
 		ctx, _ := context.WithTimeout(context.Background(), time.Second*3)
-		ids, err := c.factory.IntN(ctx, RequestSize)
+		ids, err := c.client.IntN(ctx, defaultRequestSize)
 		if err != nil {
 			select {
 			case <-c.ctx.Done():
@@ -62,22 +62,22 @@ func (c *Client) spawn() {
 	}
 }
 
-func (c *Client) Close() {
+func (c *BufferedClient) Close() {
 	c.cancel()
 	c.wg.Wait()
 }
 
-func New(factory RemoteFactory) *Client {
+func NewBufferedClient(c Client) *BufferedClient {
 	ctx, cancel := context.WithCancel(context.Background())
-	c := &Client{
-		ctx:     ctx,
-		cancel:  cancel,
-		factory: factory,
-		ch:      make(chan int64, 4096),
-		wg:      &sync.WaitGroup{},
+	bc := &BufferedClient{
+		ctx:    ctx,
+		cancel: cancel,
+		client: c,
+		ch:     make(chan int64, 4096),
+		wg:     &sync.WaitGroup{},
 	}
 
-	c.spawnN(8)
+	bc.spawnN(8)
 
-	return c
+	return bc
 }

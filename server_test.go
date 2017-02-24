@@ -24,7 +24,7 @@ func TestMask(t *testing.T) {
 }
 
 func TestIdNReturnsUniqueValues(t *testing.T) {
-	generator := New(Options{
+	generator := NewFactory(FactoryOptions{
 		ServerBits:   4,
 		SequenceBits: 2,
 	})

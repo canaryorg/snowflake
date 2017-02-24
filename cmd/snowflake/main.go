@@ -8,7 +8,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/savaki/snowflake/snowstorm"
+	"github.com/savaki/snowflake"
 )
 
 type UserData struct {
@@ -54,6 +54,6 @@ func main() {
 func Run(opts Options) {
 	serverID := opts.ServerID
 
-	handler := snowstorm.Multi(serverID, 512)
+	handler := snowflake.Multi(serverID, 512)
 	http.ListenAndServe(fmt.Sprintf(":%v", opts.Port), handler)
 }

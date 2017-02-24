@@ -1,7 +1,6 @@
 package snowflake
 
 import (
-	"strconv"
 	"sync"
 	"time"
 )
@@ -12,19 +11,19 @@ var (
 )
 
 const (
-	ServerBits   = 10
-	SequenceBits = 12
+	defaultServerBits   = 10
+	defaultSequenceBits = 12
 )
 
 // Default represents a default Factory suitable for unit testing; this is NOT suitable for production
 // use as the ServerId is fixed at 0
-var Default = New(Options{
+var Mock = NewFactory(FactoryOptions{
 	ServerBits:   10,
 	SequenceBits: 12,
 })
 
 // Options contains the configurable options for Factory
-type Options struct {
+type FactoryOptions struct {
 	// ServerId represents a unique value that identifies this generator instance
 	ServerID int64
 
@@ -35,18 +34,18 @@ type Options struct {
 	SequenceBits uint
 }
 
-func (o Options) build() Options {
-	opts := Options{
+func (o FactoryOptions) build() FactoryOptions {
+	opts := FactoryOptions{
 		ServerID:     o.ServerID,
 		ServerBits:   o.ServerBits,
 		SequenceBits: o.SequenceBits,
 	}
 
 	if o.ServerBits == 0 {
-		opts.ServerBits = ServerBits
+		opts.ServerBits = defaultServerBits
 	}
 	if o.SequenceBits == 0 {
-		opts.SequenceBits = SequenceBits
+		opts.SequenceBits = defaultSequenceBits
 	}
 
 	return opts
@@ -78,7 +77,7 @@ func mask(bits uint) int64 {
 }
 
 // New constructs a new snowflake Factory
-func New(opts Options) *Factory {
+func NewFactory(opts FactoryOptions) *Factory {
 	opts = opts.build()
 
 	serverMask := mask(opts.ServerBits)
@@ -119,15 +118,4 @@ func (s *Factory) IdN(n int) []int64 {
 	}
 
 	return ids
-}
-
-// StringN requests the next n ids represented as a base36 string 0-9, a-z
-func StringN(ids []int64) []string {
-	values := make([]string, len(ids))
-
-	for index, id := range ids {
-		values[index] = strconv.FormatInt(id, 36)
-	}
-
-	return values
 }
