@@ -24,12 +24,20 @@ func TestMask(t *testing.T) {
 }
 
 func TestIdNReturnsUniqueValues(t *testing.T) {
+	for serverBits := 2; serverBits <= 4; serverBits++ {
+		for sequenceBits := 2; sequenceBits <= 4; sequenceBits++ {
+			verifyUnique(t, uint(serverBits), uint(sequenceBits))
+		}
+	}
+}
+
+func verifyUnique(t *testing.T, serverBits, sequenceBits uint) {
 	generator := NewFactory(FactoryOptions{
-		ServerBits:   4,
-		SequenceBits: 2,
+		ServerBits:   serverBits,
+		SequenceBits: sequenceBits,
 	})
-	n := 100000
-	rounds := 8
+	n := 4096
+	rounds := 1024
 	allIds := make([][]int64, 0, rounds)
 
 	for i := 0; i < rounds; i++ {

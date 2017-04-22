@@ -113,7 +113,7 @@ func (s *Factory) IdN(n int) []int64 {
 			s.lastTime = t
 		}
 
-		id := (s.lastTime << (s.serverBits + s.sequenceBits)) | (s.serverID << s.sequenceBits) | s.sequence
+		id := (s.lastTime << (s.serverBits + s.sequenceBits)) | (s.sequence << s.serverBits) | s.serverID
 		ids = append(ids, id)
 	}
 
