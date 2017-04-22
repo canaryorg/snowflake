@@ -11,7 +11,9 @@ import (
 	"sync/atomic"
 )
 
+// Client represents a ID generate
 type Client interface {
+	// IntN generates the N unique ids
 	IntN(ctx context.Context, n int) ([]int64, error)
 }
 
@@ -22,6 +24,7 @@ type client struct {
 	doFunc    func(r *http.Request) (*http.Response, error)
 }
 
+// IntN generates the N unique ids
 func (c *client) IntN(ctx context.Context, n int) ([]int64, error) {
 	host := c.hosts[int(c.offset%c.hostCount)]
 	atomic.AddInt32(&c.offset, 1)

@@ -13,6 +13,7 @@ const (
 	defaultRequestSize = 512
 )
 
+// BufferedClient implements a client that internally buffers ids for performance purposes
 type BufferedClient struct {
 	client Client
 	ch     chan int64
