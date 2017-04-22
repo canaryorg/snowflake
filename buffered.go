@@ -20,7 +20,6 @@ type BufferedClient struct {
 	ctx    context.Context
 	cancel func()
 	wg     *sync.WaitGroup
-	n      int
 }
 
 func (c *BufferedClient) Id() int64 {
@@ -68,7 +67,7 @@ func (c *BufferedClient) Close() {
 	c.wg.Wait()
 }
 
-func NewBufferedClient(c Client) *BufferedClient {
+func NewBufferedClient(c Client, opts ...BufferedClientOption) *BufferedClient {
 	ctx, cancel := context.WithCancel(context.Background())
 	bc := &BufferedClient{
 		ctx:    ctx,
@@ -78,7 +77,29 @@ func NewBufferedClient(c Client) *BufferedClient {
 		wg:     &sync.WaitGroup{},
 	}
 
+	for _, opt := range opts {
+		opt(bc)
+	}
+
 	bc.spawnN(8)
 
 	return bc
+}
+
+type BufferedClientOption func(client *BufferedClient)
+
+func WithBufferSize(size int64) BufferedClientOption {
+	max := int64(65384)
+
+	return func(client *BufferedClient) {
+		if size < 0 || size > max {
+			panic(fmt.Sprintf("WithBufferSize must be between 0 and %v", max))
+		}
+
+		if client.ch != nil {
+			close(client.ch)
+		}
+
+		client.ch = make(chan int64, size)
+	}
 }
