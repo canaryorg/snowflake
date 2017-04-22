@@ -3,8 +3,10 @@ package snowflake_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/savaki/snowflake"
+	"github.com/stretchr/testify/assert"
 )
 
 type Remote struct {
@@ -30,4 +32,33 @@ func TestGenerateIdStream(t *testing.T) {
 	if v := len(uniques); v != iterations {
 		t.Errorf("expected %v; got %v\n", iterations, v)
 	}
+}
+
+type Mock struct {
+	count int
+}
+
+func (m *Mock) IntN(ctx context.Context, n int) ([]int64, error) {
+	now := time.Now().UnixNano()
+
+	ids := make([]int64, 0, n)
+	for i := 0; i < n; i++ {
+		ids = append(ids, now+int64(i))
+	}
+
+	m.count += n
+	return ids, nil
+}
+
+func TestWithBufferSize(t *testing.T) {
+	client := &Mock{}
+	buffered := snowflake.NewBufferedClient(client,
+		snowflake.WithBufferSize(1),
+		snowflake.WithWorkers(1),
+	)
+	id := buffered.Id()
+	assert.NotZero(t, id)
+
+	// expect < 3;  1 in buffer, 1 waiting to be pushed to buffer
+	assert.True(t, client.count <= 3, "expected < 3; got %v", client.count)
 }
