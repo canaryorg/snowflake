@@ -6,6 +6,7 @@ import (
 	"io"
 	"math/rand"
 	"os"
+	"sort"
 	"sync"
 	"time"
 )
@@ -23,12 +24,12 @@ type config struct {
 	bufferSize int
 	workers    int
 	sources    []source
-	spawnFunc  func(c *config, ids chan int64) io.Closer
+	spawnFunc  func(c *config, q *queue) io.Closer
 }
 
 type Option func(*config)
 
-func spawn(ctx context.Context, fetchN int, ch chan<- int64, sources ...source) {
+func spawn(ctx context.Context, fetchN int, q *queue, sources ...source) {
 	for {
 		source := sources[r.Intn(len(sources))]
 		v, err := source.IntN(ctx, fetchN)
@@ -38,10 +39,9 @@ func spawn(ctx context.Context, fetchN int, ch chan<- int64, sources ...source) 
 		}
 
 		for _, id := range v {
-			select {
-			case <-ctx.Done():
+			ok := q.add(ctx, id)
+			if !ok {
 				return
-			case ch <- id:
 			}
 		}
 	}
@@ -54,7 +54,7 @@ func (fn closerFunc) Close() error {
 	return nil
 }
 
-func spawnN(c *config, ids chan int64) io.Closer {
+func spawnN(c *config, q *queue) io.Closer {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	wg := &sync.WaitGroup{}
@@ -65,7 +65,7 @@ func spawnN(c *config, ids chan int64) io.Closer {
 	for i := 0; i < c.workers; i++ {
 		go func(ctx context.Context) {
 			defer wg.Done()
-			spawn(ctx, fetchN, ids, c.sources...)
+			spawn(ctx, fetchN, q, c.sources...)
 		}(ctx)
 	}
 
@@ -89,7 +89,7 @@ func New(opts ...Option) *Generator {
 		opt(c)
 	}
 
-	ids := make(chan int64, c.bufferSize)
+	ids := newQueue(c.bufferSize, nil)
 	closer := c.spawnFunc(c, ids)
 
 	return &Generator{
@@ -100,7 +100,7 @@ func New(opts ...Option) *Generator {
 
 type Generator struct {
 	closer io.Closer
-	ids    chan int64
+	ids    *queue
 }
 
 func (g *Generator) Close() error {
@@ -108,7 +108,7 @@ func (g *Generator) Close() error {
 }
 
 func (g *Generator) ID() int64 {
-	return <-g.ids
+	return <-g.ids.ch
 }
 
 type factorySource struct {
@@ -172,32 +172,51 @@ func WithMonotonic() Option {
 	}
 }
 
-func monotonic(c *config, ids chan int64) io.Closer {
+func monotonic(c *config, ids *queue) io.Closer {
 	ctx, cancel := context.WithCancel(context.Background())
 	sourceCount := len(c.sources)
 
 	// Logic:
 	// 1. Create a bucket for each source/worker combination e.g. 3 workers per source would mean 3 buckets
-	// 2. Spawn goroutines to pull for each worker independently
+	// 2. Spawn go routines to pull for each worker independently
 	// 3. Return the lowest value from each column
 	buckets := c.workers * sourceCount
 
 	wg := &sync.WaitGroup{}
 	wg.Add(buckets)
 
-	all := make([]chan int64, 0, buckets)
+	all := make(queues, 0, buckets)
+	wake := make(chan struct{})
 
-	for index, source := range c.sources {
+	for _, source := range c.sources {
 		for i := 0; i < c.workers; i++ {
-			bucket := index*c.workers + i
-			all[bucket] = make(chan int64, 128)
+			q := newQueue(c.bufferSize, wake)
+			all = append(all, q)
 
 			go func() {
 				defer wg.Done()
-				spawn(ctx, 128, all[bucket], source)
+				spawn(ctx, 128, q, source)
 			}()
 		}
 	}
+
+	go func() {
+		last := int64(0)
+		for {
+			sort.Sort(all)
+			if v, ok := all[0].peek(); ok {
+				if v < last {
+					<-wake // wait until some data arrives
+					continue
+				}
+
+				ok := ids.add(ctx, v)
+				if !ok {
+					return
+				}
+			}
+		}
+	}()
 
 	closer := closerFunc(func() {
 		cancel()
