@@ -77,6 +77,10 @@ func (q queues) Less(i, j int) bool {
 }
 
 func (q queues) Next() (int64, bool) {
+	if len(q) == 0 {
+		return 0, false
+	}
+
 	sort.Sort(q)
 	return q[0].remove()
 }
